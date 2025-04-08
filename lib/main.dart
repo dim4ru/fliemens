@@ -26,7 +26,7 @@ class PLCConnectionPage extends StatefulWidget {
 }
 
 class _PLCConnectionPageState extends State<PLCConnectionPage> {
-  final String _plcIpAddress = '192.168.1.10'; // Replace with your PLC IP
+  final String _plcIpAddress = '192.168.0.5'; // Replace with your PLC IP
   final int _plcPort = 102; // Default Siemens S7 port
   Socket? _socket;
   String _connectionStatus = 'Disconnected';
