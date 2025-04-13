@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
-import 'dart:async';
-import 'dart:convert';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 void main() {
   runApp(MyApp());
@@ -11,77 +9,74 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Siemens PLC TCP/IP',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: PLCConnectionPage(),
+      title: 'PLC Data App',
+      home: PlcDataScreen(),
     );
   }
 }
 
-class PLCConnectionPage extends StatefulWidget {
+class PlcDataScreen extends StatefulWidget {
   @override
-  _PLCConnectionPageState createState() => _PLCConnectionPageState();
+  _PlcDataScreenState createState() => _PlcDataScreenState();
 }
 
-class _PLCConnectionPageState extends State<PLCConnectionPage> {
-  final String _plcIpAddress = '192.168.0.5'; // Replace with your PLC IP
-  final int _plcPort = 102; // Default Siemens S7 port
-  Socket? _socket;
-  String _connectionStatus = 'Disconnected';
-  String _receivedData = 'No data received yet';
-  bool _isConnected = false;
+class _PlcDataScreenState extends State<PlcDataScreen> {
+  IO.Socket? socket;
+  double plcValue = 0.0;
+  String errorMessage = '';
 
   @override
   void initState() {
     super.initState();
-    connectToPLC();
+    connectToServer();
   }
 
-  void connectToPLC() async {
+  void connectToServer() {
     try {
-      _socket = await Socket.connect(_plcIpAddress, _plcPort, timeout: Duration(seconds: 5));
-      setState(() {
-        _connectionStatus = 'Connected';
-        _isConnected = true;
+      socket = IO.io('http://192.168.31.236:3000', <String, dynamic>{
+        'transports': ['websocket'],
+        'autoConnect': false,
       });
-      _socket?.listen(
-        (List<int> data) {
-          setState(() {
-            _receivedData = utf8.decode(data); // Assuming data is UTF-8 encoded
-          });
-          print('Data received: ${utf8.decode(data)}');
-        },
-        onError: (error) {
-          print('Error: $error');
-          setState(() {
-            _connectionStatus = 'Error: $error';
-            _isConnected = false;
-          });
-        },
-        onDone: () {
-          print('Connection closed.');
-          setState(() {
-            _connectionStatus = 'Disconnected';
-            _isConnected = false;
-          });
-          _socket?.destroy();
-        },
-      );
-      print('Connected to: ${_socket?.remoteAddress.address}:${_socket?.remotePort}');
+
+      socket!.on('connect', (_) {
+        print('Подключено к серверу Socket.IO');
+        setState(() {
+          errorMessage = ''; // Очищаем сообщение об ошибке при успешном подключении
+        });
+      });
+
+      socket!.on('plcData', (data) {
+        setState(() {
+          plcValue = data;
+        });
+      });
+
+      socket!.on('connect_error', (data) {
+        print('Ошибка подключения: $data');
+        setState(() {
+          errorMessage = 'Ошибка подключения к серверу: $data';
+        });
+      });
+
+      socket!.on('disconnect', (_) {
+        print('Отключено от сервера Socket.IO');
+        setState(() {
+          errorMessage = 'Отключено от сервера Socket.IO';
+        });
+      });
+
+      socket!.connect();
     } catch (e) {
-      print('Failed to connect: $e');
+      print('Ошибка подключения: $e');
       setState(() {
-        _connectionStatus = 'Failed to connect: $e';
-        _isConnected = false;
+        errorMessage = 'Ошибка подключения: $e';
       });
     }
   }
 
   @override
   void dispose() {
-    _socket?.destroy();
+    socket!.disconnect();
     super.dispose();
   }
 
@@ -89,15 +84,24 @@ class _PLCConnectionPageState extends State<PLCConnectionPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Siemens PLC TCP/IP'),
+        title: Text('PLC Data'),
       ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Text('Connection Status: $_connectionStatus'),
-            SizedBox(height: 20),
-            Text('Received Data: $_receivedData'),
+            if (errorMessage.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  errorMessage,
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            Text(
+              'Значение ПЛК: $plcValue',
+              style: TextStyle(fontSize: 24),
+            ),
           ],
         ),
       ),
