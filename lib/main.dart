@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 void main() {
   runApp(MyApp());
@@ -9,102 +10,39 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'PLC Data App',
-      home: PlcDataScreen(),
-    );
-  }
-}
-
-class PlcDataScreen extends StatefulWidget {
-  @override
-  _PlcDataScreenState createState() => _PlcDataScreenState();
-}
-
-class _PlcDataScreenState extends State<PlcDataScreen> {
-  IO.Socket? socket;
-  double plcValue = 0.0;
-  String errorMessage = '';
-
-  @override
-  void initState() {
-    super.initState();
-    connectToServer();
-  }
-
-  void connectToServer() {
-    try {
-      socket = IO.io('http://192.168.31.236:3000', <String, dynamic>{
-        'transports': ['websocket'],
-        'autoConnect': false,
-      });
-
-      socket!.on('connect', (_) {
-        print('Подключено к серверу Socket.IO');
-        setState(() {
-          errorMessage = ''; // Очищаем сообщение об ошибке при успешном подключении
-        });
-      });
-
-      socket!.on('plcData', (data) {
-        setState(() {
-          plcValue = data;
-        });
-      });
-
-      socket!.on('connect_error', (data) {
-        print('Ошибка подключения: $data');
-        setState(() {
-          errorMessage = 'Ошибка подключения к серверу: $data';
-        });
-      });
-
-      socket!.on('disconnect', (_) {
-        print('Отключено от сервера Socket.IO');
-        setState(() {
-          errorMessage = 'Отключено от сервера Socket.IO';
-        });
-      });
-
-      socket!.connect();
-    } catch (e) {
-      print('Ошибка подключения: $e');
-      setState(() {
-        errorMessage = 'Ошибка подключения: $e';
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    socket!.disconnect();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('PLC Data'),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            if (errorMessage.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  errorMessage,
-                  style: TextStyle(color: Colors.red),
-                ),
-              ),
-            Text(
-              'Значение ПЛК: $plcValue',
-              style: TextStyle(fontSize: 24),
-            ),
-          ],
+      title: 'PLC Data',
+      home: Scaffold(
+        appBar: AppBar(
+          title: Text('PLC Data'),
+        ),
+        body: Center(
+          child: FutureBuilder(
+            future: fetchPLCData(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return CircularProgressIndicator();
+              } else if (snapshot.hasError) {
+                return Text('Error: ${snapshot.error}');
+              } else {
+                var data = snapshot.data;
+                return Text('Temperature: ${data?['temperature']}\n'
+                    'Pump State: ${data?['pumpState']}\n'
+                    'Counter: ${data?['counter']}');
+              }
+            },
+          ),
         ),
       ),
     );
+  }
+
+  Future<Map<String, dynamic>> fetchPLCData() async {
+    final response = await http.get(Uri.parse('http://109.71.242.101:3000/plc-data'));
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load data');
+    }
   }
 }
